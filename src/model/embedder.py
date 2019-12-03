@@ -7,6 +7,7 @@
 
 from logging import getLogger
 import torch
+import torch.nn as nn
 
 from .transformer import TransformerModel
 from ..data.dictionary import Dictionary, BOS_WORD, EOS_WORD, PAD_WORD, UNK_WORD, MASK_WORD
@@ -62,15 +63,28 @@ class SentenceEmbedder(object):
         self.n_layers = model.n_layers
         self.out_dim = model.dim
         self.n_words = model.n_words
+        self.para_model = None
 
     def train(self):
         self.model.train()
+        if self.para_model is not None:
+            self.para_model.eval()
 
     def eval(self):
         self.model.eval()
+        if self.para_model is not None:
+            self.para_model.eval()
 
     def cuda(self):
         self.model.cuda()
+
+    def to(self, device):
+        self.model.to(device)
+        if self.para_model is not None:
+            self.para_model.to(device)
+
+    def set_para(self):
+        self.para_model = nn.DataParallel(self.model, dim=1)
 
     def get_parameters(self, layer_range):
 
@@ -127,10 +141,13 @@ class SentenceEmbedder(object):
         With out_dim == emb_dim
         """
         slen, bs = x.size()
-        assert lengths.size(0) == bs and lengths.max().item() == slen
+        assert lengths.size(1) == bs and lengths.max().item() == slen
 
         # get transformer last hidden layer
-        tensor = self.model('fwd', x=x, lengths=lengths, positions=positions, langs=langs, causal=False)
+        if self.para_model is not None:
+            tensor = self.para_model('fwd', x=x, lengths=lengths, positions=positions, langs=langs, causal=False)
+        else:
+            tensor = self.model('fwd', x=x, lengths=lengths, positions=positions, langs=langs, causal=False)
         assert tensor.size() == (slen, bs, self.out_dim)
 
         # single-vector sentence representation (first column of last layer)

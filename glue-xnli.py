@@ -11,12 +11,14 @@ import argparse
 from src.utils import bool_flag, initialize_exp
 from src.evaluation.glue import GLUE
 from src.evaluation.xnli import XNLI
+from src.evaluation.trans import TRANS
 from src.model.embedder import SentenceEmbedder
 
 
 GLUE_TASKS = ['MNLI-m', 'MNLI-mm', 'QQP', 'QNLI', 'SST-2', 'CoLA', 'MRPC', 'RTE', 'STS-B', 'WNLI', 'AX_MNLI-m']
 XNLI_TASKS = ['XNLI']
-TASKS = GLUE_TASKS + XNLI_TASKS
+TRANS_TASKS = ['TRANS']
+TASKS = GLUE_TASKS + XNLI_TASKS + TRANS_TASKS
 
 
 # parse parameters
@@ -107,6 +109,7 @@ scores = {}
 # prepare trainers / evaluators
 glue = GLUE(embedder, scores, params)
 xnli = XNLI(embedder, scores, params)
+trans = TRANS(embedder, scores, params)
 
 # run
 for task in params.transfer_tasks:
@@ -114,3 +117,5 @@ for task in params.transfer_tasks:
         glue.run(task)
     if task in XNLI_TASKS:
         xnli.run()
+    if task in TRANS_TASKS:
+        trans.run()

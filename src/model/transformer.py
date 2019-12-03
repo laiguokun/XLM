@@ -343,6 +343,8 @@ class TransformerModel(nn.Module):
 
         # check inputs
         slen, bs = x.size()
+        if len(lengths.size()) == 2: 
+            lengths = lengths.squeeze(0)
         assert lengths.size(0) == bs
         assert lengths.max().item() <= slen
         x = x.transpose(0, 1)  # batch size as dimension 0
@@ -424,7 +426,6 @@ class TransformerModel(nn.Module):
 
         # move back sequence length to dimension 0
         tensor = tensor.transpose(0, 1)
-
         return tensor
 
     def predict(self, tensor, pred_mask, y, get_scores):
