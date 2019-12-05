@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from ..optim import get_optimizer
 from ..utils import truncate, to_cuda
 from ..utils import concat_batches as concat_batches_xnli
-from ..data.dataset import ParallelDataset
+from ..data.dataset import ParallelDataset, Dataset
 from ..data.loader import load_binarized, set_dico_parameters
 
 
@@ -27,6 +27,14 @@ XNLI_LANGS = ['en', 'de']
 
 
 logger = getLogger()
+
+def create_batches(
+        x, lens, lang_id, pad_idx, eos_idx,
+        reset_positions):
+    langs = x.new(x.size()).fill_(lang_id)
+    lengths = lens[None, :]
+    positions = torch.arange(x.size(0))[:, None].repeat(1, x.size(1)).to(x.device)
+    return x, lengths, positions, langs
 
 def concat_batches(
         x1, len1, lang1_id, x2, len2, lang2_id, pad_idx, eos_idx,
@@ -107,16 +115,18 @@ def loss_func_2(x, params, proj=None):
     return loss, acc
 
 #loss softmax((x-y)^2)
-def loss_func(x, params):
+def loss_func(x, params, proj=None):
     bsz = x.size(0) // 2
     x1 = x[:bsz, None, :]
     x2 = x[None, bsz:, :]
     dist = ((x1 - x2) * (x1 - x2)).mean(-1)
-    p = F.log_softmax(dist, 1)
-    loss = -p.diag().mean()
-    pred = torch.max(p, 1)[1]
-    acc = torch.mean((pred.cpu() == torch.arange(bsz)).float())
+    output = dist.view(bsz, bsz)
+    y = torch.arange(bsz).long().to(x.device)
+    loss = F.cross_entropy(output, y)
+    pred = torch.max(output, 1)[1]
+    acc = torch.mean((pred.eq(y)).float()).item()
     return loss, acc
+
 
 #loss hinge_loss([x,y])
 def loss_func_hinge(x, params, proj=None):
@@ -225,7 +235,7 @@ class TRANS:
         Finetune for one epoch on the XNLI English training set.
         """
         params = self.params
-        self.embedder.eval()
+        self.embedder.train()
 
         # training variables
         losses = []
@@ -264,7 +274,7 @@ class TRANS:
             x, lengths, positions, langs = to_cuda(x, lengths, positions, langs)
             # loss
             output = self.embedder.get_embeddings(x, lengths, positions, langs)
-            loss, acc = loss_func_2(output, self.params, self.proj)
+            loss, acc = loss_func(output, self.params, self.proj)
             # backward / optimization
             self.optimizer_e.zero_grad()
             self.optimizer_p.zero_grad()
@@ -277,14 +287,16 @@ class TRANS:
             nw += lengths.sum().item()
             losses.append(loss.item())
             nacc += (acc * bs)
+            bns += bs
 
             # log
             if ns % (100 * bs) < bs:
                 logger.info("XNLI - Epoch %i - Train sample %7i - %.1f \
                             words/s - Loss: %.4f - ACC: %.4f" % \
                             (self.epoch, ns, nw / (time.time() - t),
-                            sum(losses) / len(losses), nacc / bs))
+                            sum(losses) / len(losses), nacc / bns))
                 nw, t = 0, time.time()
+                bns = 0
                 nacc = 0
                 losses = []
 
@@ -297,7 +309,7 @@ class TRANS:
         Evaluate on XNLI validation and test sets, for all languages.
         """
         params = self.params
-        self.embedder.train()
+        self.embedder.eval()
 
         scores = OrderedDict({'epoch': self.epoch})
         lang_id_1 = params.lang2id['en']
@@ -323,7 +335,7 @@ class TRANS:
 
             # forward
             output = self.embedder.get_embeddings(x, lengths, positions, langs)
-            loss, acc = loss_func_2(output, self.params, self.proj)
+            loss, acc = loss_func(output, self.params, self.proj)
 
             # update statistics
             valid += acc * len(len1)
@@ -386,3 +398,85 @@ class TRANS:
         data['params'] = {k: v for k, v in self.params.__dict__.items()}
 
         torch.save(data, path)
+
+
+class TRANS_h:
+
+    def __init__(self, embedder, proj, scores, params):
+        """
+        Initialize XNLI trainer / evaluator.
+        Initial `embedder` should be on CPU to save memory.
+        """
+        self._embedder = embedder
+        self.params = params
+        self.scores = scores
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # embedder
+        self.embedder = copy.deepcopy(self._embedder)
+        if torch.cuda.device_count() > 1:
+            print('using', torch.cuda.device_count(), 'GPUs')
+            self.embedder.set_para()
+
+        self.embedder.to(self.device)
+        self.proj = proj
+        if proj is not None:
+            self.proj = self.proj.to(self.device)
+
+    def get_iterator(self, lang):
+        """
+        Get a monolingual data iterator.
+        """
+        return self.data[lang]['x'].get_iterator(
+            shuffle=False,
+            group_by_size=self.params.group_by_size,
+            return_indices=True
+        )
+
+    def get_hidden(self, file_name, lang):
+        params = self.params
+        self.data = self.load_data(file_name, lang)
+        self.embedder.eval()
+        lang_id = params.lang2id[lang]
+        hidden = []
+        with torch.no_grad():
+            for batch in self.get_iterator(lang):
+
+                # batch
+                (sents, lens), idx = batch
+                x, lengths, positions, langs = create_batches(
+                    sents, lens, lang_id,
+                    params.pad_index,
+                    params.eos_index,
+                    reset_positions=False
+                )
+
+                # cuda
+                x, lengths, positions, langs = to_cuda(x, lengths, positions, langs)
+
+                # forward
+                output = self.embedder.get_embeddings(x, lengths, positions, langs)
+                if lang == 'en' and self.proj is not None:
+                    output = self.proj(output)
+
+                hidden.append(output.cpu())
+        hidden = torch.cat(hidden, 0)
+        save_path = os.path.join(params.save_path, file_name.split('/')[-1])
+        torch.save(hidden, save_path)
+
+    def load_data(self, file_name, lang):
+        """
+        Load XNLI cross-lingual classification data.
+        """
+        params = self.params
+        data = {}
+        data[lang] = {}
+        # load data and dictionary
+        data1 = load_binarized(file_name, params)
+        # set dictionary parameters
+        data['dico'] = data.get('dico', data1['dico'])
+        set_dico_parameters(params, data, data1['dico'])
+        # create dataset
+        data[lang]['x'] = Dataset(
+                data1['sentences'], data1['positions'],
+                params)
+        return data

@@ -20,7 +20,7 @@ logger = getLogger()
 class SentenceEmbedder(object):
 
     @staticmethod
-    def reload(path, params):
+    def reload(path, params, pretrain_params=None):
         """
         Create a sentence embedder from a pretrained model.
         """
@@ -34,7 +34,8 @@ class SentenceEmbedder(object):
 
         # reload dictionary and model parameters
         dico = Dictionary(reloaded['dico_id2word'], reloaded['dico_word2id'], reloaded['dico_counts'])
-        pretrain_params = AttrDict(reloaded['params'])
+        if pretrain_params is None:
+            pretrain_params = AttrDict(reloaded['params'])
         pretrain_params.n_words = len(dico)
         pretrain_params.bos_index = dico.index(BOS_WORD)
         pretrain_params.eos_index = dico.index(EOS_WORD)
