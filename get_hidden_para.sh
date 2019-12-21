@@ -1,0 +1,11 @@
+CUDA_VISIBLE_DEVICES=1 python get-hidden-para.py \
+--exp_name test_trans_mlm15 \
+--dump_path ./cache/ \
+--save_path ./cache/ \
+--model_path ./dumped/checkpoint_best.pth \
+--data_path ./data/processed/ende/ \
+--optimizer_e adam,lr=0.000025 \
+--optimizer_p adam,lr=0.000025 \
+--batch_size 256 \
+--max_len 64 \
+--max_vocab 95000 \
