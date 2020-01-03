@@ -116,5 +116,8 @@ scores = {}
 # prepare trainers / evaluators
 data_root = params.data_path
 trans = TRANS_h(embedder, proj, scores, params)
-file_names = ('valid.en.pth', 'valid.de.pth')
-trans.get_hidden(file_names, 'test.pth')
+file_list = list(range(22)) + [23,24,27]
+for i in file_list:
+    fill_i = str(i).zfill(4)
+    file_names = ('en{}.tmp.pth'.format(fill_i), 'de{}.tmp.pth'.format(fill_i))
+    trans.get_hidden(file_names, '{}.pth'.format(fill_i))

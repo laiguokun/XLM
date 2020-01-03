@@ -55,7 +55,7 @@ def loss_func(x, params, proj=None):
     loss = F.cross_entropy(output, y)
     pred = torch.max(output, 1)[1]
     acc = torch.mean(pred.eq(y).float())
-    mask = mask.view(bsz * bsz, 1).float()
+    mask = mask.view(bsz * bsz,).float()
     true_acc = torch.sum(mask * pred.eq(y).float()) / torch.sum(mask)
     r_mask = 1 - mask
     false_acc = torch.sum(r_mask * pred.eq(y).float()) / torch.sum(r_mask)
@@ -127,12 +127,12 @@ class TRANS:
 
         self.embedder.to(self.device)
 
-        # self.proj = nn.Sequential(*[
-        #     nn.Linear(self.embedder.out_dim, 2)
-        # ]).cuda()
         self.proj = nn.Sequential(*[
-            nn.Linear(self.embedder.out_dim, 1)
+            nn.Linear(self.embedder.out_dim, 2)
         ]).cuda()
+        #self.proj = nn.Sequential(*[
+        #    nn.Linear(self.embedder.out_dim, 1)
+        #]).cuda()
         # optimizers
         self.optimizer_e = get_optimizer(list(self.embedder.get_parameters(params.finetune_layers)), params.optimizer_e)
         self.optimizer_p = get_optimizer(self.proj.parameters(), params.optimizer_p)
@@ -205,7 +205,8 @@ class TRANS:
             x, lengths, positions, langs = to_cuda(x, lengths, positions, langs)
             # loss
             output = self.embedder.get_embeddings(x, lengths, positions, langs)
-            loss, acc, true_acc, false_acc = loss_func_hinge(output, self.params, self.proj)
+            #loss, acc, true_acc, false_acc = loss_func_hinge(output, self.params, self.proj)
+            loss, acc, true_acc, false_acc = loss_func(output, self.params, self.proj)
             # backward / optimization
             self.optimizer_e.zero_grad()
             self.optimizer_p.zero_grad()
@@ -272,8 +273,8 @@ class TRANS:
 
             # forward
             output = self.embedder.get_embeddings(x, lengths, positions, langs)
-            loss, acc, true_acc, false_acc = loss_func_hinge(output, self.params, self.proj)
-
+            #loss, acc, true_acc, false_acc = loss_func_hinge(output, self.params, self.proj)
+            loss, acc, true_acc, false_acc = loss_func(output, self.params, self.proj)
             # update statistics
             valid += acc * x.size(1)
             true_valid += true_acc * x.size(1)
