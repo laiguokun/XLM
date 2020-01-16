@@ -15,12 +15,12 @@
 #     --model_path trained_model.pth --output_path output
 #
 
+import setGPU
 import os
 import io
 import sys
 import argparse
 import torch
-
 from src.utils import AttrDict
 from src.utils import bool_flag, initialize_exp
 from src.data.dictionary import Dictionary
@@ -39,7 +39,7 @@ def get_parser():
     parser.add_argument("--exp_name", type=str, default="", help="Experiment name")
     parser.add_argument("--exp_id", type=str, default="", help="Experiment ID")
     parser.add_argument("--batch_size", type=int, default=32, help="Number of sentences per batch")
-
+    parser.add_argument("--max_len", type=int, default=256, help="max len of src")
     # model / output paths
     parser.add_argument("--model_path", type=str, default="", help="Model path")
     parser.add_argument("--output_path", type=str, default="", help="Output path")
@@ -62,10 +62,19 @@ def main(params):
     # generate parser / parse parameters
     parser = get_parser()
     params = parser.parse_args()
-    reloaded = torch.load(params.model_path)
+    reloaded = torch.load(params.model_path, map_location=lambda storage, loc: storage.cuda())
+    enc_reload = reloaded
+    enc_reload = enc_reload['model' if 'model' in enc_reload else 'encoder']
+    if all([k.startswith('module.') for k in enc_reload.keys()]):
+        enc_reload = {k[len('module.'):]: v for k, v in enc_reload.items()}
+    dec_reload = reloaded
+    dec_reload = dec_reload['model' if 'model' in dec_reload else 'decoder']
+    if all([k.startswith('module.') for k in dec_reload.keys()]):
+        dec_reload = {k[len('module.'):]: v for k, v in dec_reload.items()}
+    if all([k.startswith('module.') for k in reloaded.keys()]):
+        reloaded = {k[len('module.'):]: v for k, v in reloaded.items()}
     model_params = AttrDict(reloaded['params'])
     logger.info("Supported languages: %s" % ", ".join(model_params.lang2id.keys()))
-
     # update dictionary parameters
     for name in ['n_words', 'bos_index', 'eos_index', 'pad_index', 'unk_index', 'mask_index']:
         setattr(params, name, getattr(model_params, name))
@@ -74,8 +83,8 @@ def main(params):
     dico = Dictionary(reloaded['dico_id2word'], reloaded['dico_word2id'], reloaded['dico_counts'])
     encoder = TransformerModel(model_params, dico, is_encoder=True, with_output=True).cuda().eval()
     decoder = TransformerModel(model_params, dico, is_encoder=False, with_output=True).cuda().eval()
-    encoder.load_state_dict(reloaded['encoder'])
-    decoder.load_state_dict(reloaded['decoder'])
+    encoder.load_state_dict(enc_reload)
+    decoder.load_state_dict(dec_reload)
     params.src_id = model_params.lang2id[params.src_lang]
     params.tgt_id = model_params.lang2id[params.tgt_lang]
 
@@ -93,6 +102,7 @@ def main(params):
         # prepare batch
         word_ids = [torch.LongTensor([dico.index(w) for w in s.strip().split()])
                     for s in src_sent[i:i + params.batch_size]]
+        word_ids = [word_ids[i][:params.max_len] for i in range(len(word_ids))]
         lengths = torch.LongTensor([len(s) + 2 for s in word_ids])
         batch = torch.LongTensor(lengths.max().item(), lengths.size(0)).fill_(params.pad_index)
         batch[0] = params.eos_index
@@ -119,7 +129,7 @@ def main(params):
             # output translation
             source = src_sent[i + j].strip()
             target = " ".join([dico[sent[k].item()] for k in range(len(sent))])
-            sys.stderr.write("%i / %i: %s -> %s\n" % (i + j, len(src_sent), source, target))
+            #sys.stderr.write("%i / %i: %s -> %s\n" % (i + j, len(src_sent), source, target))
             f.write(target + "\n")
 
     f.close()
