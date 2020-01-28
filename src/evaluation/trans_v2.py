@@ -32,52 +32,40 @@ def concat_batches(
             x1, len1, lang1_id, x2, len2, lang2_id, pad_idx, eos_idx,
             reset_positions):
     """
-    Concat batches with different languages.
+    Concat batches with different languages. n postive, n negative
     """
     bsz = x1.size(1)
-    x1 = x1[:, :, None].repeat(1, 1, bsz).view(-1, bsz*bsz)
-    len1 = len1[:, None].repeat(1, bsz).view(bsz*bsz,)
-    x2 = x2[:, None, :].repeat(1, bsz, 1).view(-1, bsz*bsz)
-    len2 = len2[None, :].repeat(bsz, 1).view(bsz*bsz,)
+    x2_neg_idx = torch.randint(0, bsz, (bsz,)).long()
+    x2_pos_idx = torch.arange(0, bsz).long()
+    overlap = (x2_neg_idx == x2_pos_idx)
+    n_overlap = torch.sum(overlap)
+    while n_overlap != 0:
+        overlap_neg = torch.randint(0, bsz, (n_overlap,))
+        x2_neg_idx[overlap] = overlap_neg
+        overlap = (x2_neg_idx == x2_pos_idx)
+        n_overlap = torch.sum(overlap)
+    x1 = torch.cat([x1, x1], 1)
+    x2 = torch.cat([x2, x2[:, x2_neg_idx]], 1)
+    len1 = torch.cat([len1, len1], 0)
+    len2 = torch.cat([len2, len2[x2_neg_idx]], 0)
     x, lengths, positions, langs = concat_batches_xnli(
-            x1, len1, lang1_id, x2, len2, lang2_id, pad_idx, eos_idx,
-            reset_positions)
+        x1, len1, lang1_id, x2, len2, lang2_id, pad_idx, eos_idx,
+        reset_positions)
     lengths = lengths[None, :]
     return x, lengths, positions, langs
 
 def loss_func(x, params, proj=None):
-    bsz = int(x.size(0) ** 0.5)
-    y = torch.zeros(bsz, bsz, device=x.device).long()
-    mask = torch.eye(bsz, bsz).bool().to(x.device)
-    y.masked_fill_(mask, 1)
-    y = y.view(-1,)
+    bsz = x.size(0)
+    y = torch.zeros(bsz // 2, device=x.device).long()
+    y = torch.cat([1-y, y], 0)
     output = proj(x)
     loss = F.cross_entropy(output, y)
     pred = torch.max(output, 1)[1]
     acc = torch.mean(pred.eq(y).float())
-    mask = mask.view(bsz * bsz,).float()
-    true_acc = torch.sum(mask * pred.eq(y).float()) / torch.sum(mask)
-    r_mask = 1 - mask
-    false_acc = torch.sum(r_mask * pred.eq(y).float()) / torch.sum(r_mask)
+    true_acc = torch.mean(pred.eq(y)[:bsz//2].float())
+    false_acc = torch.mean(pred.eq(y)[bsz//2:].float())
     return loss, acc, true_acc, false_acc
 
-#loss hinge_loss([x,y])
-def loss_func_hinge(x, params, proj=None):
-    bsz = int(x.size(0) ** 0.5)
-    y = torch.zeros(bsz, bsz, device=x.device).float() - 1
-    mask = torch.eye(bsz, bsz).bool().to(x.device)
-    y.masked_fill_(mask, 1)
-    y = y.view(-1, 1)
-    output = proj(x)
-    loss = torch.max(1 - (output * y), torch.zeros(bsz*bsz, device=x.device))
-    loss = torch.mean(loss)
-    pred = ((output > 0).float() * 2 - 1).view(-1, 1)
-    acc = torch.mean((pred.eq(y)).float()).item()
-    mask = mask.view(bsz * bsz, 1).float()
-    true_acc = torch.sum(mask * pred.eq(y).float()) / torch.sum(mask)
-    r_mask = 1 - mask
-    false_acc = torch.sum(r_mask * pred.eq(y).float()) / torch.sum(r_mask)
-    return loss, acc, true_acc, false_acc
 
 def pred_func(x, params, proj=None):
     output = proj(x)
