@@ -101,6 +101,20 @@ def get_masks(slen, lengths, causal):
     return mask, attn_mask
 
 
+def label_smoothed_nll_loss(lprobs, target, epsilon):
+    lprobs = F.log_softmax(lprobs, -1)
+    if target.dim() == lprobs.dim() - 1:
+        target = target.unsqueeze(-1)
+    nll_loss = -lprobs.gather(dim=-1, index=target)
+    smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
+    nll_loss = nll_loss.squeeze(-1)
+    smooth_loss = smooth_loss.squeeze(-1)
+    nll_loss = nll_loss.mean()
+    smooth_loss = smooth_loss.mean()
+    eps_i = epsilon / lprobs.size(-1)
+    loss = (1. - epsilon) * nll_loss + eps_i * smooth_loss
+    return loss, nll_loss
+
 class PredLayer(nn.Module):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
@@ -110,6 +124,7 @@ class PredLayer(nn.Module):
         self.asm = params.asm
         self.n_words = params.n_words
         self.pad_index = params.pad_index
+        self.label_smooth = params.label_smooth
         dim = params.emb_dim
 
         if params.asm is False:
@@ -129,7 +144,11 @@ class PredLayer(nn.Module):
         """
         assert (y == self.pad_index).sum().item() == 0
 
-        if self.asm is False:
+        if self.label_smooth > 0:
+            scores = self.proj(x).view(-1, self.n_words)
+            loss, _ = label_smoothed_nll_loss(scores, y, self.label_smooth)
+
+        elif self.asm is False:
             scores = self.proj(x).view(-1, self.n_words)
             loss = F.cross_entropy(scores, y, reduction='mean')
         else:
@@ -343,7 +362,7 @@ class TransformerModel(nn.Module):
 
         # check inputs
         slen, bs = x.size()
-        if len(lengths.size()) == 2: 
+        if len(lengths.size()) == 2:
             lengths = lengths.squeeze(0)
         assert lengths.size(0) == bs
         assert lengths.max().item() <= slen

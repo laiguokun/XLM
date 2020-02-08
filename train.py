@@ -205,7 +205,10 @@ def get_parser():
                         help="Debug multi-GPU / multi-node within a SLURM job")
     parser.add_argument("--debug", help="Enable all debug flags",
                         action="store_true")
-
+    parser.add_argument("--label_smooth", type=float, default=0,
+                        help="")
+    parser.add_argument("--generate", help="",default=False,
+                        action="store_true")
     # multi-gpu / multi-node
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="Multi-GPU - Local rank")
