@@ -71,7 +71,7 @@ class Trainer(object):
             if params.multi_gpu:
                 logger.info("Using apex.parallel.DistributedDataParallel ...")
                 for name in self.MODEL_NAMES:
-                    setattr(self, name, apex.parallel.DistributedDataParallel(getattr(self, name), delay_allreduce=True))
+                    setattr(self, name, apex.parallel.DistributedDataParallel(getattr(self, name), delay_allreduce=True, find_unused_parameters=True))
 
         # stopping criterion used for early stopping
         if params.stopping_criterion != '':
