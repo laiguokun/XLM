@@ -124,7 +124,7 @@ class PredLayer(nn.Module):
         self.asm = params.asm
         self.n_words = params.n_words
         self.pad_index = params.pad_index
-        self.label_smooth = params.label_smooth
+        self.label_smooth = getattr(params, "label_smooth", 0)
         dim = params.emb_dim
 
         if params.asm is False:
