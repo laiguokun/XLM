@@ -109,15 +109,17 @@ class TRANS:
 
         # embedder
         self.embedder = copy.deepcopy(self._embedder)
+        self.proj_one = nn.Sequential(*[
+            nn.Linear(self.embedder.out_dim, 2)
+        ])
+
         if torch.cuda.device_count() > 1:
             print('using', torch.cuda.device_count(), 'GPUs')
             self.embedder.set_para()
-
+            self.proj = nn.DataParallel(self.proj_one)
         self.embedder.to(self.device)
 
-        self.proj = nn.Sequential(*[
-            nn.Linear(self.embedder.out_dim, 2)
-        ]).cuda()
+        self.proj.to(self.device)
         #self.proj = nn.Sequential(*[
         #    nn.Linear(self.embedder.out_dim, 1)
         #]).cuda()
@@ -321,7 +323,7 @@ class TRANS:
 
         logger.warning(f"Saving model parameters ...")
         data['model'] = self.embedder.model.state_dict()
-        data['proj'] = self.proj.state_dict()
+        data['proj'] = self.proj_one.state_dict()
 
         data['dico_id2word'] = self.data['dico'].id2word
         data['dico_word2id'] = self.data['dico'].word2id
@@ -346,7 +348,7 @@ class TRANS_h:
         if torch.cuda.device_count() > 1:
             print('using', torch.cuda.device_count(), 'GPUs')
             self.embedder.set_para()
-
+            
         self.embedder.to(self.device)
         self.proj = proj
         if proj is not None:

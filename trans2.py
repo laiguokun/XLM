@@ -65,7 +65,7 @@ parser.add_argument("--optimizer_e", type=str, default="adam,lr=0.0001",
 parser.add_argument("--optimizer_p", type=str, default="adam,lr=0.0001",
                     help="Projection (classifier) optimizer")
 parser.add_argument("--n_epochs", type=int, default=100,
-                    help="Maximum number of epochs")
+        help="Maximum number of epochs")
 parser.add_argument("--epoch_size", type=int, default=-1,
                     help="Epoch size (-1 for full pass over the dataset)")
 #parser.add_argument("--split", type=str, default="valid")
@@ -98,7 +98,7 @@ if params.tokens_per_batch > -1:
 assert os.path.isdir(params.data_path)
 assert os.path.isfile(params.model_path)
 
-reloaded = torch.load('./mlm_xnli15_1024.pth')
+reloaded = torch.load(params.model_path)
 pretrain_params = AttrDict(reloaded['params'])
 # reload pretrained model
 embedder = SentenceEmbedder.reload(params.model_path, params, pretrain_params)
