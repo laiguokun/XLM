@@ -76,6 +76,8 @@ parser.add_argument("--debug_train", type=bool_flag, default=False,
 parser.add_argument("--debug_slurm", type=bool_flag, default=False,
                     help="Debug multi-GPU / multi-node within a SLURM job")
 
+parser.add_argument("--lang1", type=str, default="en")
+parser.add_argument("--lang2", type=str, default="de")
 
 def reloaded_proj(path, embedder):
     reloaded = torch.load(path)

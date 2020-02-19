@@ -23,8 +23,6 @@ from ..data.dataset import ParallelDataset, Dataset
 from ..data.loader import load_binarized, set_dico_parameters
 
 
-XNLI_LANGS = ['en', 'de']
-
 
 logger = getLogger()
 
@@ -166,8 +164,8 @@ class TRANS:
         t = time.time()
 
         iterator = self.get_iterator('train', 'en')
-        lang_id_1 = params.lang2id['en']
-        lang_id_2 = params.lang2id['de']
+        lang_id_1 = params.lang2id[params.lang1]
+        lang_id_2 = params.lang2id[params.lang1]
 
         while True:
 
@@ -238,8 +236,8 @@ class TRANS:
         self.embedder.eval()
 
         scores = OrderedDict({'epoch': self.epoch})
-        lang_id_1 = params.lang2id['en']
-        lang_id_2 = params.lang2id['de']
+        lang_id_1 = params.lang2id[params.lang1]
+        lang_id_2 = params.lang2id[params.lang2]
         splt = 'valid'
         valid = 0
         total = 0
@@ -288,15 +286,15 @@ class TRANS:
         data = {}
         lang = 'en'
         data[lang] = {splt: {} for splt in ['train', 'valid']}
-        dpath = os.path.join(params.data_path, 'ende')
+        dpath = params.data_path
 
         for splt in ['train', 'valid']:
 
             # load data and dictionary
             # data1 = load_binarized(os.path.join(dpath, '%s.%s.pth' % (splt, lang)), params)
             # data2 = load_binarized(os.path.join(dpath, '%s.%s.pth' % (splt, lang)), params)
-            data1 = load_binarized(os.path.join(dpath, '%s.%s.pth' % (splt, 'en')), params)
-            data2 = load_binarized(os.path.join(dpath, '%s.%s.pth' % (splt, 'de')), params)
+            data1 = load_binarized(os.path.join(dpath, '%s.%s.pth' % (splt, params.lang1)), params)
+            data2 = load_binarized(os.path.join(dpath, '%s.%s.pth' % (splt, params.lang2)), params)
             data['dico'] = data.get('dico', data1['dico'])
 
             # set dictionary parameters
@@ -368,8 +366,8 @@ class TRANS_h:
         params = self.params
         self.data = self.load_data(file_names)
         self.embedder.eval()
-        lang_id_1 = params.lang2id['en']
-        lang_id_2 = params.lang2id['de']
+        lang_id_1 = params.lang2id[params.lang1]
+        lang_id_2 = params.lang2id[parmas.lang2]
         hidden = []
         with torch.no_grad():
             for batch in self.get_iterator():

@@ -21,6 +21,9 @@ REPLACE_UNICODE_PUNCT=$MOSES/scripts/tokenizer/replace-unicode-punctuation.perl
 NORM_PUNC=$MOSES/scripts/tokenizer/normalize-punctuation.perl
 REM_NON_PRINT_CHAR=$MOSES/scripts/tokenizer/remove-non-printing-char.perl
 TOKENIZER=$MOSES/scripts/tokenizer/tokenizer.perl
+WMT16_SCRIPTS=$TOOLS_PATH/wmt16-scripts
+NORMALIZE_ROMANIAN=$WMT16_SCRIPTS/preprocess/normalise-romanian.py
+REMOVE_DIACRITICS=$WMT16_SCRIPTS/preprocess/remove-diacritics.py
 
 # Chinese
 if [ "$lg" = "zh" ]; then
@@ -32,6 +35,8 @@ elif [ "$lg" = "th" ]; then
 elif [ "$lg" = "ja" ]; then
   cat - | $REPLACE_UNICODE_PUNCT | $NORM_PUNC -l $lg | $REM_NON_PRINT_CHAR | kytea -notags
 # other languages
+elif [ "$lg" = "ro" ]; then
+  cat - | $REPLACE_UNICODE_PUNCT | $NORM_PUNC -l $lg | $REM_NON_PRINT_CHAR | $NORMALIZE_ROMANIAN | $REMOVE_DIACRITICS | $TOKENIZER -l $lg -no-escape -threads $N_THREADS
 else
   cat - | $REPLACE_UNICODE_PUNCT | $NORM_PUNC -l $lg | $REM_NON_PRINT_CHAR | $TOKENIZER -no-escape -threads $N_THREADS -l $lg
 fi
