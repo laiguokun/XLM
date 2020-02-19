@@ -75,7 +75,7 @@ parser.add_argument("--debug_train", type=bool_flag, default=False,
                     help="Use valid sets for train sets (faster loading)")
 parser.add_argument("--debug_slurm", type=bool_flag, default=False,
                     help="Debug multi-GPU / multi-node within a SLURM job")
-
+parser.add_argument("--params_path", type=str, default=None)
 
 def reloaded_proj(path, embedder):
     reloaded = torch.load(path)
@@ -97,7 +97,7 @@ if params.tokens_per_batch > -1:
 assert os.path.isdir(params.data_path)
 assert os.path.isfile(params.model_path)
 
-reloaded = torch.load('./mlm_xnli15_1024.pth')
+reloaded = torch.load(params.params_path)
 pretrain_params = AttrDict(reloaded['params'])
 # reload pretrained model
 embedder = SentenceEmbedder.reload(params.model_path, params, pretrain_params)
@@ -116,8 +116,10 @@ scores = {}
 # prepare trainers / evaluators
 data_root = params.data_path
 trans = TRANS_h(embedder, proj, scores, params)
-file_list = list(range(69))
-for i in file_list:
-    fill_i = str(i).zfill(4)
-    file_names = ('en{}.tmp.pth'.format(fill_i), 'de{}.tmp.pth'.format(fill_i))
-    trans.get_hidden(file_names, '{}.pth'.format(fill_i))
+file_list = ['xlm']
+for fn in file_list:
+    en_file = fn + '.en.pth'
+    de_file = fn + '.de.pth'
+    out_file = fn + '.res.pth'
+    file_names = (en_file, de_file)
+    trans.get_hidden(file_names, out_file)
